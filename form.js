@@ -379,13 +379,42 @@ class AbstractControl {
             errorHandler: null,
             isHandleErrors: true,
             errors: [],
-            valid:  true
+            valid: true
         }, options);
 
         this.state = {
-            formState: null,
-            isValid: true
+            value: null,
+            valid: false,
+            touch: false,
+            defaultValue: null
         };
+
+        this.parentControl = null;
+    }
+
+    get inValid()
+    {
+        return this.state.valid === false;
+    }
+
+    get valid()
+    {
+        return this.state.valid === true;
+    }
+
+    get isTouch()
+    {
+        return this.state.touch;
+    }
+
+    getDefaultValue()
+    {
+        return this.state.defaultValue;
+    }
+
+    getValue()
+    {
+        return this.state.value;
     }
 
     set formState(formState)
@@ -399,34 +428,69 @@ class AbstractControl {
         return this.state.formState;
     }
 
-    get isValid()
-    {
-        return this.state.formState;
-    }
-
-    set isValid(isValid)
-    {
-        this.state.isValid = isValid;
-    }
-
-
+    /**
+     *
+     * @param { AbstractControl } abstractControl
+     * @returns {AbstractControl}
+     */
     setParentControl(abstractControl)
     {
         this.parentControl = abstractControl;
         return this;
     }
 
+    /**
+     *
+     * @returns { AbstractControl|null }
+     */
     getParentControl()
     {
         return this.parentControl;
     }
 
-    updateParent()
-    {
-        this.getParentControl().update(this);
-        return this;
-    }
 
+    parse(controlsConfig)
+    {
+        let abstractControls;
+
+        if (controlsConfig instanceof AbstractControl){
+
+            return controlsConfig;
+
+        }else if (Array.isArray(controlsConfig)){
+
+            abstractControls = [];
+
+            controlsConfig.forEach((abstractControl) => {
+
+                if (abstractControl instanceof AbstractControl){
+
+                    abstractControl.setParentControl(this);
+                    abstractControls.push(abstractControl.parse());
+                }
+
+            });
+
+
+        }else {
+
+            abstractControls = {};
+
+            controlsConfig.forEach((formControlName, abstractControl) => {
+
+                if (abstractControl instanceof AbstractControl){
+
+                    abstractControl.setParentControl(this);
+                    abstractControls[formControlName] = abstractControl.parse();;
+
+                }
+            });
+
+        }
+
+
+        return abstractControls;
+    }
     /**
      *
      * @return {HTMLElement|null}
@@ -502,11 +566,8 @@ class FormGroup extends AbstractControl{
     constructor(controlsConfig, validators, options) {
 
         super(validators, Object.assign({
-            onReady: null,
-            onFormStateChange: null,
-            onFormValueChange: null,
-            defaultValue: null,
-            formValue: null
+            onValueChange: null,
+            onStateChange: null,
         }, options));
 
         this.controls  = this.parse(controlsConfig);
@@ -522,16 +583,13 @@ class FormGroup extends AbstractControl{
 
         const abstractControls = {};
 
-        controlsConfig.forEach((formControlName, abstractControlConfig) => {
-            if (abstractControlConfig instanceof AbstractControl){
+        controlsConfig.forEach((formControlName, abstractControl) => {
 
-                abstractControls[formControlName] = abstractControlConfig instanceof FormArray ? abstractControlConfig.parse() : abstractControlConfig;
-                abstractControls[formControlName].parentControl = this;
+            if (abstractControl instanceof AbstractControl){
 
-            }else if (Array.isArray(abstractControlConfig)){
+                abstractControl.setParentControl(this).parse();
+                abstractControls[formControlName] = abstractControl;
 
-                abstractControls[formControlName] = new FormControl(abstractControlConfig[0] || [], abstractControlConfig[1] || {})
-                abstractControls[formControlName].parentControl = this;
             }
         });
 
@@ -689,7 +747,7 @@ class FormArray extends AbstractControl{
 
     /**
      *
-     * @param {Array<Array | AbstractControl>} controlsConfig
+     * @param { Array<AbstractControl> } controlsConfig
      * @return {Array<AbstractControl>}
      */
     parse(controlsConfig)
@@ -697,18 +755,13 @@ class FormArray extends AbstractControl{
 
         const abstractControls = [];
 
-        controlsConfig.forEach( abstractControlConfig => {
+        controlsConfig.forEach( abstractControl => {
 
-            if (abstractControlConfig instanceof AbstractControl){
+            if (abstractControl instanceof AbstractControl){
 
-                abstractControlConfig.parentControl = this;
-                abstractControls.push(abstractControlConfig);
+                abstractControl.setParentControl(this).parse();
+                abstractControls.push(abstractControl);
 
-            }else if (Array.isArray(abstractControlConfig)){
-
-                const formControl = new FormControl(abstractControlConfig[0] || [], abstractControlConfig[1] || {})
-                formControl.parentControl = this;
-                abstractControls.push(formControl);
             }
         });
 
@@ -816,6 +869,10 @@ class FormControl extends AbstractControl{
         this.bindEventListeners();
     }
 
+    parse(controlConfig)
+    {
+
+    }
     storeFormValue() {
         this.state.formState = this.elememt.value;
         return this;
